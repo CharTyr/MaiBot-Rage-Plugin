@@ -328,7 +328,8 @@ class RagePromptInjector(BaseEventHandler):
         if not message:
             return True, True, None, None, None
         
-        chat_id = message.chat_stream.stream_id if message.chat_stream else None
+        # MaiMessages使用stream_id而不是chat_stream
+        chat_id = message.stream_id
         if not chat_id:
             return True, True, None, None, None
         
