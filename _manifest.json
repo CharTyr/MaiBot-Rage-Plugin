@@ -1,0 +1,68 @@
+{
+  "manifest_version": 1,
+  "name": "麦麦哈气插件 (MaiBot Rage Plugin)",
+  "version": "1.0.0",
+  "description": "为MaiBot加入可量化的怒气值系统，根据对话中受到的挑衅、调戏等行为逐步增加怒气值，怒气值越高，回复越暴躁",
+  "author": {
+    "name": "MaiBot社区",
+    "url": "https://github.com/MaiM-with-u"
+  },
+  "license": "GPL-v3.0-or-later",
+  "host_application": {
+    "min_version": "0.8.0"
+  },
+  "keywords": [
+    "rage",
+    "anger",
+    "emotion",
+    "怒气",
+    "哈气",
+    "情绪"
+  ],
+  "categories": [
+    "Emotion",
+    "Personality"
+  ],
+  "default_locale": "zh-CN",
+  "plugin_info": {
+    "is_built_in": false,
+    "plugin_type": "emotion",
+    "components": [
+      {
+        "type": "event_handler",
+        "name": "rage_detector",
+        "description": "检测挑衅行为并更新怒气值"
+      },
+      {
+        "type": "event_handler",
+        "name": "rage_prompt_injector",
+        "description": "根据怒气等级注入对应的prompt"
+      },
+      {
+        "type": "command",
+        "name": "rage_show",
+        "description": "显示当前怒气值状态",
+        "pattern": "/rage show"
+      },
+      {
+        "type": "command",
+        "name": "rage_set",
+        "description": "设置怒气值",
+        "pattern": "/rage set <value>"
+      },
+      {
+        "type": "command",
+        "name": "rage_reset",
+        "description": "重置怒气值",
+        "pattern": "/rage reset"
+      }
+    ],
+    "features": [
+      "怒气值追踪系统",
+      "挑衅行为检测",
+      "三档怒气等级",
+      "动态prompt注入",
+      "怒气值自然衰减"
+    ]
+  }
+}
