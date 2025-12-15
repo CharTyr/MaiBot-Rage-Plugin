@@ -144,6 +144,41 @@ class RageManager:
 # 全局怒气管理器实例
 rage_manager = RageManager()
 
+# 插件启用状态
+_enabled_chats: Dict[str, bool] = {}  # chat_id -> enabled
+_global_enabled: bool = True  # 全局开关
+
+
+def is_plugin_enabled(chat_id: str) -> bool:
+    """检查插件在指定聊天中是否启用"""
+    if not _global_enabled:
+        return False
+    return _enabled_chats.get(chat_id, True)
+
+
+def set_plugin_enabled(chat_id: str, enabled: bool):
+    """设置插件在指定聊天中的启用状态"""
+    _enabled_chats[chat_id] = enabled
+
+
+def set_global_enabled(enabled: bool):
+    """设置全局启用状态"""
+    global _global_enabled
+    _global_enabled = enabled
+
+
+def is_global_enabled() -> bool:
+    """获取全局启用状态"""
+    return _global_enabled
+
+
+def check_admin_permission(user_id: str, config: Dict[str, Any]) -> bool:
+    """检查用户是否有管理员权限"""
+    admin_list = config.get("auth", {}).get("admin_qq", [])
+    if not admin_list:
+        return True  # 未配置则所有人可用
+    return str(user_id) in [str(qq) for qq in admin_list]
+
 
 # ===== Action组件 - 由Planner智能判断 =====
 
@@ -180,6 +215,10 @@ class ProvocationAction(BaseAction):
         chat_id = self.chat_stream.stream_id if self.chat_stream else None
         if not chat_id:
             return False, "无法获取聊天信息"
+        
+        # 检查插件是否启用
+        if not is_plugin_enabled(chat_id):
+            return True, "插件已禁用"
         
         # 获取挑衅强度
         intensity = self.action_data.get("intensity", "moderate")
@@ -226,6 +265,9 @@ class TeaseAction(BaseAction):
         if not chat_id:
             return False, "无法获取聊天信息"
         
+        if not is_plugin_enabled(chat_id):
+            return True, "插件已禁用"
+        
         amount = self.get_config("rage.tease_amount", 5.0)
         state = rage_manager.add_rage(chat_id, amount)
         
@@ -261,6 +303,9 @@ class AnnoyAction(BaseAction):
         if not chat_id:
             return False, "无法获取聊天信息"
         
+        if not is_plugin_enabled(chat_id):
+            return True, "插件已禁用"
+        
         amount = self.get_config("rage.annoy_amount", 10.0)
         state = rage_manager.add_rage(chat_id, amount)
         
@@ -285,6 +330,10 @@ class RagePromptInjector(BaseEventHandler):
         
         chat_id = message.chat_stream.stream_id if message.chat_stream else None
         if not chat_id:
+            return True, True, None, None, None
+        
+        # 检查插件是否启用
+        if not is_plugin_enabled(chat_id):
             return True, True, None, None, None
         
         # 获取怒气prompt
@@ -416,6 +465,53 @@ class ResetRageCommand(BaseCommand):
             return False, str(e), False
 
 
+class ToggleRageCommand(BaseCommand):
+    """开关插件（需要管理员权限）"""
+    
+    command_name = "rage_toggle"
+    command_description = "开关怒气插件：/rage on|off [all]"
+    command_pattern = r"^/rage\s+(?P<action>on|off)(?:\s+(?P<scope>all))?$"
+
+    async def execute(self) -> Tuple[bool, Optional[str], bool]:
+        try:
+            chat_id = self.message.chat_stream.stream_id if self.message.chat_stream else None
+            if not chat_id:
+                return False, "无法获取聊天流信息", False
+            
+            # 鉴权检查
+            user_id = str(self.message.user_info.user_id) if self.message.user_info else None
+            if not user_id:
+                return False, "无法获取用户信息", False
+            
+            if not check_admin_permission(user_id, rage_manager._config):
+                await send_api.text_to_stream(
+                    "⛔ 无权限，仅管理员可操作", chat_id, storage_message=False
+                )
+                return False, "无权限", False
+            
+            action = self.matched_groups.get("action", "on") if self.matched_groups else "on"
+            scope = self.matched_groups.get("scope") if self.matched_groups else None
+            enabled = action == "on"
+            
+            if scope == "all":
+                # 全局开关
+                set_global_enabled(enabled)
+                status = "✅ 全局已开启" if enabled else "❌ 全局已关闭"
+            else:
+                # 当前群聊开关
+                set_plugin_enabled(chat_id, enabled)
+                status = "✅ 本群已开启" if enabled else "❌ 本群已关闭"
+            
+            await send_api.text_to_stream(
+                f"🔥 麦麦哈气插件 {status}", chat_id, storage_message=False
+            )
+            return True, None, False
+            
+        except Exception as e:
+            await self.send_text(f"失败: {e}", storage_message=False)
+            return False, str(e), False
+
+
 # ===== 插件注册 =====
 
 @register_plugin
@@ -432,7 +528,8 @@ class MaiBotRagePlugin(BasePlugin):
         "plugin": "插件基本信息",
         "rage": "怒气值系统配置",
         "prompts": "各等级怒气prompt",
-        "features": "功能开关"
+        "features": "功能开关",
+        "auth": "权限配置"
     }
     
     config_schema: dict = {
@@ -443,7 +540,7 @@ class MaiBotRagePlugin(BasePlugin):
         },
         "rage": {
             "max_rage": ConfigField(type=float, default=100.0, description="最大怒气值"),
-            "decay_rate": ConfigField(type=float, default=0.5, description="每分钟衰减值"),
+            "decay_rate": ConfigField(type=float, default=4.0, description="每分钟衰减值"),
             "decay_interval": ConfigField(type=int, default=60, description="衰减间隔(秒)"),
             "provocation_mild": ConfigField(type=float, default=8.0, description="轻度挑衅增加怒气"),
             "provocation_moderate": ConfigField(type=float, default=18.0, description="中度挑衅增加怒气"),
@@ -454,6 +551,9 @@ class MaiBotRagePlugin(BasePlugin):
         "features": {
             "enable_commands": ConfigField(type=bool, default=True, description="启用命令"),
             "enable_decay": ConfigField(type=bool, default=True, description="启用自然衰减"),
+        },
+        "auth": {
+            "admin_qq": ConfigField(type=list, default=[], description="管理员QQ号列表，为空则所有人可用"),
         },
     }
 
@@ -478,6 +578,7 @@ class MaiBotRagePlugin(BasePlugin):
                 (ShowRageCommand.get_command_info(), ShowRageCommand),
                 (SetRageCommand.get_command_info(), SetRageCommand),
                 (ResetRageCommand.get_command_info(), ResetRageCommand),
+                (ToggleRageCommand.get_command_info(), ToggleRageCommand),
             ])
         
         return components

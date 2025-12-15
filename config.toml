@@ -71,3 +71,9 @@ level3 = """
 [features]
 enable_commands = true   # 是否启用命令
 enable_decay = true      # 是否启用怒气值自然衰减
+
+# 权限配置
+[auth]
+# 管理员QQ号列表，可以使用 /rage on|off 开关插件
+# 为空则所有人可用
+admin_qq = []
