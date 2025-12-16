@@ -322,8 +322,11 @@ class RagePromptInjector(BaseEventHandler):
     event_type = EventType.POST_LLM
     handler_name = "rage_prompt_injector"
     handler_description = "根据怒气等级注入对应的prompt"
+    
+    # 必须设置为True才能阻塞执行并返回修改后的消息
+    intercept_message = True
 
-    async def execute(self, message: MaiMessages | None) -> Tuple[bool, bool, str | None, None, None]:
+    async def execute(self, message: MaiMessages | None) -> Tuple[bool, bool, str | None, None, Optional[MaiMessages]]:
         """在LLM请求前注入怒气prompt"""
         if not message:
             return True, True, None, None, None
@@ -331,16 +334,16 @@ class RagePromptInjector(BaseEventHandler):
         # MaiMessages使用stream_id而不是chat_stream
         chat_id = message.stream_id
         if not chat_id:
-            return True, True, None, None, None
+            return True, True, None, None, message
         
         # 检查插件是否启用
         if not is_plugin_enabled(chat_id):
-            return True, True, None, None, None
+            return True, True, None, None, message
         
         # 获取怒气prompt
         rage_prompt = rage_manager.get_rage_prompt(chat_id)
         if not rage_prompt:
-            return True, True, None, None, None
+            return True, True, None, None, message
         
         # 获取当前怒气状态
         state = rage_manager.get_rage(chat_id)
@@ -351,9 +354,10 @@ class RagePromptInjector(BaseEventHandler):
             message.llm_prompt = rage_header + str(message.llm_prompt)
             message._modify_flags.modify_llm_prompt = True
             
-            logger.debug(f"[Rage] 注入怒气prompt，等级{state.level}")
+            logger.info(f"[Rage] 注入怒气prompt，等级{state.level}，怒气值{state.value:.0f}")
         
-        return True, True, None, None, None
+        # 返回修改后的message对象
+        return True, True, None, None, message
 
 
 # ===== Command组件 =====
