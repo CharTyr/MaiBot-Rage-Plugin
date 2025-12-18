@@ -30,8 +30,8 @@
     "components": [
       {
         "type": "event_handler",
-        "name": "rage_detector",
-        "description": "检测挑衅行为并更新怒气值"
+        "name": "rage_startup",
+        "description": "启动时初始化怒气配置并启动自然衰减"
       },
       {
         "type": "event_handler",

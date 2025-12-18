@@ -84,14 +84,20 @@ class RageManager:
         state.level = 0
         return state
 
-    def decay_rage(self, chat_id: str) -> RageState:
-        """衰减怒气值"""
+    def decay_rage(self, chat_id: str, elapsed_seconds: Optional[float] = None) -> RageState:
+        """衰减怒气值
+
+        配置中的 decay_rate 表示“每分钟衰减值”，因此会按 elapsed_seconds 进行折算。
+        """
         state = self.get_rage(chat_id)
         if state.value <= 0:
             return state
         
-        decay_rate = self._config.get("rage", {}).get("decay_rate", 0.5)
-        state.value = max(0, state.value - decay_rate)
+        decay_rate_per_min = float(self._config.get("rage", {}).get("decay_rate", 0.5))
+        if elapsed_seconds is None:
+            elapsed_seconds = float(self._config.get("rage", {}).get("decay_interval", 60))
+        decay_amount = decay_rate_per_min * (float(elapsed_seconds) / 60.0)
+        state.value = max(0, state.value - decay_amount)
         state.last_update = time.time()
         state.level = self._calculate_level(state.value)
         return state
@@ -135,7 +141,7 @@ class RageManager:
                     continue
                 
                 for chat_id in list(self._rage_states.keys()):
-                    self.decay_rage(chat_id)
+                    self.decay_rage(chat_id, elapsed_seconds=interval)
         
         self._decay_task = asyncio.create_task(decay_loop())
         logger.info("[Rage] 怒气衰减循环已启动")
@@ -360,6 +366,34 @@ class RagePromptInjector(BaseEventHandler):
         return True, True, None, None, message
 
 
+# ===== EventHandler - 启动初始化 =====
+
+class RageStartupHandler(BaseEventHandler):
+    """启动时初始化怒气系统并启动衰减循环
+
+    说明：当前MaiBot插件系统不会自动调用插件类中的 on_load()，
+    因此需要通过 ON_START 事件完成初始化，否则会出现：
+    - 怒气 prompt 永远为空（未注入配置）
+    - 自然衰减任务未启动（怒气值不会下降）
+    """
+
+    event_type = EventType.ON_START
+    handler_name = "rage_startup"
+    handler_description = "启动时初始化怒气配置并启动自然衰减"
+
+    async def execute(
+        self, message: MaiMessages | None
+    ) -> Tuple[bool, bool, str | None, None, Optional[MaiMessages]]:
+        try:
+            rage_manager.set_config(self.plugin_config or {})
+            await rage_manager.start_decay_loop()
+            logger.info("[Rage] 启动初始化完成")
+            return True, True, None, None, message
+        except Exception as e:
+            logger.error(f"[Rage] 启动初始化失败: {e}", exc_info=True)
+            return False, True, str(e), None, message
+
+
 # ===== Command组件 =====
 
 class ShowRageCommand(BaseCommand):
@@ -574,6 +608,8 @@ class MaiBotRagePlugin(BasePlugin):
             (ProvocationAction.get_action_info(), ProvocationAction),
             (TeaseAction.get_action_info(), TeaseAction),
             (AnnoyAction.get_action_info(), AnnoyAction),
+            # EventHandler - 启动初始化（确保衰减循环启动、配置注入生效）
+            (RageStartupHandler.get_handler_info(), RageStartupHandler),
             # EventHandler - prompt注入
             (RagePromptInjector.get_handler_info(), RagePromptInjector),
         ]
