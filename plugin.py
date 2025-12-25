@@ -26,6 +26,8 @@ from src.common.logger import get_logger
 
 logger = get_logger("RagePlugin")
 
+_LLM_JUDGE = getattr(ActionActivationType, "LLM_JUDGE", ActionActivationType.ALWAYS)
+
 
 @dataclass
 class RageState:
@@ -195,7 +197,7 @@ class ProvocationAction(BaseAction):
     action_description = "检测到对方在挑衅、辱骂、攻击你，增加怒气值"
     
     # 使用LLM_JUDGE让planner智能判断
-    activation_type = ActionActivationType.LLM_JUDGE
+    activation_type = _LLM_JUDGE
     
     # 可以和回复并行执行
     parallel_action = True
@@ -250,7 +252,7 @@ class TeaseAction(BaseAction):
     action_name = "rage_tease"
     action_description = "检测到对方在调戏、撩你、说土味情话，轻微增加怒气值"
     
-    activation_type = ActionActivationType.LLM_JUDGE
+    activation_type = _LLM_JUDGE
     parallel_action = True
     
     action_parameters = {}
@@ -288,7 +290,7 @@ class AnnoyAction(BaseAction):
     action_name = "rage_annoy"
     action_description = "检测到对方在烦你、纠缠你、重复骚扰，增加怒气值"
     
-    activation_type = ActionActivationType.LLM_JUDGE
+    activation_type = _LLM_JUDGE
     parallel_action = True
     
     action_parameters = {}
